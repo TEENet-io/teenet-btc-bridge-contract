@@ -28,124 +28,171 @@ const sign = (msg: any, aux: any) => {
     const s = toHex(sig.slice(32, 64));
 
     return { rx, s };
-} 
+}
 
 describe("TEENetBtcEvmBridge", function () {
     async function deployBridge() {
-        const bridge = await hre.ethers.deployContract("TEENetBtcEvmBridge", [pk]); 
-        
+        const bridge = await hre.ethers.deployContract("TEENetBtcEvmBridge", [pk]);
+
         return { bridge };
     };
 
-    it("should deploy the contract with the correct pk value", async function () {
-        const { bridge } = await loadFixture(deployBridge);
-        
-        expect(await bridge.pk()).to.equal(BigInt(pk));
+    describe("Deployment", function () {
+        it("should deploy the contract with the correct pk value", async function () {
+            const { bridge } = await loadFixture(deployBridge);
+
+            expect(await bridge.pk()).to.equal(BigInt(pk));
+        });
+
+        it("should deploy the TWBTC contract with the bridge as the owner", async function () {
+            const { bridge } = await loadFixture(deployBridge);
+
+            const twbtcAddr = await bridge.twbtc();
+            const twbtc = await hre.ethers.getContractAt("TWBTC", twbtcAddr);
+
+            expect(await twbtc.owner()).to.equal(await bridge.getAddress());
+        });
     });
 
-    it("should deploy the TWBTC contract with the bridge as the owner", async function () {
-        const { bridge } = await loadFixture(deployBridge);
+    describe("Schnorr", function () {
+        it("should verify schnorr signature", async function () {
+            const { bridge } = await loadFixture(deployBridge);
 
-        const twbtcAddr = await bridge.twbtc();
-        const twbtc = await hre.ethers.getContractAt("TWBTC", twbtcAddr);
+            const sk = randomInt(32);
+            const aux = Buffer.from(randomBytes(32));
+            const pubKey = getPubKey(sk);
+            const msg = randomBuffer(32);
+            const sig = schnorr.sign(sk, msg, aux);
 
-        expect(await twbtc.owner()).to.equal(await bridge.getAddress());
+            try {
+                schnorr.verify(pubKey, msg, sig)
+            } catch (e: any) {
+                assert.fail(e);
+            };
+
+            const bip340 = await hre.ethers.getContractAt("Bip340Ecrec", await bridge.bip340());
+
+            const pk = toHex(pubKey);
+            const rx = toHex(sig.slice(0, 32));
+            const s = toHex(sig.slice(32, 64));
+            const m = toHex(msg);
+
+            expect(await bip340.verify(pk, rx, s, m)).to.equal(true);
+        });
     });
 
-    it("should verify schnorr signature", async function () {
-        const { bridge } = await loadFixture(deployBridge);
+    describe("Mint", function () {
+        it('should mint TWBTC tokens and emit Minted event', async () => {
+            const { bridge } = await loadFixture(deployBridge);
 
-        const sk = randomInt(32);
-        const aux = Buffer.from(randomBytes(32));
-        const pubKey = getPubKey(sk);
-        const msg = randomBuffer(32);
-        const sig = schnorr.sign(sk, msg, aux);
+            const evmAddress = hexlify(randomBytes(20));
+            const amount = 100;
+            const msg = randomBuffer(32);
+            const aux = randomBuffer(32);
+            const btcTxId = toHex(msg);
+            const { rx, s } = sign(msg, aux);
 
-        try {
-            schnorr.verify(pubKey, msg, sig)
-        } catch(e: any) {
-            assert.fail(e);
-        };
+            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
+                .to.emit(bridge, 'Minted')
+                .withArgs(getAddress(evmAddress), amount, btcTxId);
 
-        const bip340 = await hre.ethers.getContractAt("Bip340Ecrec", await bridge.bip340());
+            const twbtc = await hre.ethers.getContractAt("TWBTC", await bridge.twbtc());
+            const balance = await twbtc.balanceOf(evmAddress);
+            expect(balance).to.equal(amount);
+        });
+        it('should revert if evmAddress is zero address', async () => {
+            const { bridge } = await loadFixture(deployBridge);
 
-        const pk = toHex(pubKey);
-        const rx = toHex(sig.slice(0, 32));
-        const s = toHex(sig.slice(32, 64));
-        const m = toHex(msg);
+            const evmAddress = '0x' + '0'.repeat(40);
+            const amount = 100;
+            const btcTxId = hexlify(randomBytes(32));
+            const rx = hexlify(randomBytes(32));
+            const s = hexlify(randomBytes(32));
 
-        expect(await bip340.verify(pk, rx, s, m)).to.equal(true);
+            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
+                .to.be.revertedWithCustomError(bridge, 'InvalidEvmAddress');
+        });
+
+        it('should revert if amount is zero', async () => {
+            const { bridge } = await loadFixture(deployBridge);
+
+            const evmAddress = hexlify(randomBytes(20));
+            const amount = 0;
+            const btcTxId = hexlify(randomBytes(32));
+            const rx = hexlify(randomBytes(32));
+            const s = hexlify(randomBytes(32));
+
+            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
+                .to.be.revertedWithCustomError(bridge, 'AmountMustBeGreaterThanZero');
+        });
+
+        it('should revert if signature is invalid', async () => {
+            const { bridge } = await loadFixture(deployBridge);
+
+            const evmAddress = hexlify(randomBytes(20));
+            const amount = 100;
+            const msg = randomBuffer(32);
+            const aux = randomBuffer(32);
+            const btcTxId = toHex(msg);
+            const { rx, s } = sign(msg, aux);
+
+            // Modify the signature to make it invalid
+            const modifiedS = '0x' + (BigInt(s) + 1n).toString(16);
+
+            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
+                .to.emit(bridge, 'Minted')
+                .withArgs(getAddress(evmAddress), amount, btcTxId);
+            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, modifiedS))
+                .to.be.revertedWithCustomError(bridge, 'InvalidSchnorrSignature')
+                .withArgs(btcTxId, rx, modifiedS);
+        });
     });
-    it('should mint TWBTC tokens and emit Minted event', async () => {
-        const { bridge } = await loadFixture(deployBridge);
 
-        const evmAddress = hexlify(randomBytes(20));
-        const amount = 100;
-        const msg = randomBuffer(32);
-        const aux = randomBuffer(32);
-        const btcTxId = toHex(msg);
-        const { rx, s } = sign(msg, aux);
+    describe("Redeem", function () {
+        describe("Request", function () {
+            it('should emit RedeemRequested event', async () => {
+                const { bridge } = await loadFixture(deployBridge);
 
-        await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
-            .to.emit(bridge, 'Minted')
-            .withArgs(getAddress(evmAddress), amount, btcTxId);
+                const signer = await hre.ethers.provider.getSigner(9);
 
-        const twbtc = await hre.ethers.getContractAt("TWBTC", await bridge.twbtc());
-        const balance = await twbtc.balanceOf(evmAddress);
-        expect(balance).to.equal(amount);
-    });
-    it('should revert if evmAddress is zero address', async () => {
-        const { bridge } = await loadFixture(deployBridge);
+                const mintAmount = 100;
+                const msg = randomBuffer(32);
+                const aux = randomBuffer(32);
+                const btcTxId = toHex(msg);
+                const { rx, s } = sign(msg, aux);
 
-        const evmAddress = '0x' + '0'.repeat(40);
-        const amount = 100;
-        const btcTxId = hexlify(randomBytes(32));
-        const rx = hexlify(randomBytes(32));
-        const s = hexlify(randomBytes(32));
+                await expect(bridge.mint(signer.address, mintAmount, btcTxId, rx, s))
+                    .to.emit(bridge, 'Minted')
+                    .withArgs(signer.address, mintAmount, btcTxId);
 
-        await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s)).to.be.revertedWithCustomError(bridge, 'InvalidEvmAddress');
+                const redeemAmount = 100;
+                const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
+
+                await expect(bridge.connect(signer).redeemRequest(redeemAmount, btcAddress))
+                    .to.emit(bridge, 'RedeemRequested')
+                    .withArgs(signer.address, redeemAmount, btcAddress);
+            });
+            it('should revert if amount is zero', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const amount = 0;
+                const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
+
+                await expect(bridge.redeemRequest(amount, btcAddress))
+                    .to.be.revertedWithCustomError(bridge, 'AmountMustBeGreaterThanZero');
+            });
+
+            it('should revert if sender has insufficient balance', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const signer = await hre.ethers.provider.getSigner(9);
+
+                const amount = 100;
+                const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
+
+                await expect(bridge.connect(signer).redeemRequest(amount, btcAddress))
+                    .to.be.revertedWithCustomError(bridge, 'InsufficientBalance');
+            });
+        });
     });
 });
-
-// import { ethers } from 'hardhat';
-// import { expect } from 'chai';
-// import { hexlify } from "ethers";
-
-// describe('TEENetBtcEvmBridge', () => {
-//     let bridge;
-//     let twbtc;
-//     let bip340;
-
-//     beforeEach(async () => {
-//         const Bridge = await ethers.getContractFactory('TEENetBtcEvmBridge');
-//         bridge = await Bridge.deploy(123456789); // Replace with actual pk value
-//         await bridge.deployed();
-
-//         twbtc = await ethers.getContractAt('TWBTC', await bridge.twbtc());
-//         bip340 = await ethers.getContractAt('Bip340Ecrec', await bridge.bip340());
-//     });
-
-
-//     it('should revert if amount is zero', async () => {
-//         const evmAddress = '0x1234567890abcdef1234567890abcdef12345678'; // Replace with actual EVM address
-//         const amount = 0;
-//         const btcTxId = ethers.utils.formatBytes32String('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef');
-//         const rx = 123456789; // Replace with actual rx value
-//         const s = 987654321; // Replace with actual s value
-
-//         await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s)).to.be.revertedWith('AmountMustBeGreaterThanZero');
-//     });
-
-//     it('should revert if signature is invalid', async () => {
-//         const evmAddress = '0x1234567890abcdef1234567890abcdef12345678'; // Replace with actual EVM address
-//         const amount = 100;
-//         const btcTxId = ethers.utils.formatBytes32String('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef');
-//         const rx = 123456789; // Replace with actual rx value
-//         const s = 987654321; // Replace with actual s value
-
-//         // Modify the signature to make it invalid
-//         const modifiedS = s + 1;
-
-//         await expect(bridge.mint(evmAddress, amount, btcTxId, rx, modifiedS)).to.be.revertedWith('InvalidSignature');
-//     });
-// });

@@ -19,11 +19,20 @@ describe("TWBTC", function () {
         expect(await twbtc.symbol()).to.equal("TWBTC");
     });
 
-    it("should mint tokens", async function () {
-        const amount = hre.ethers.parseUnits("100", 8);
-        await twbtc.connect(owner).mint(await addr1.getAddress(), amount);
+    describe('mint', function () {
+        it("should mint tokens", async function () {
+            const amount = hre.ethers.parseUnits("100", 8);
+            await twbtc.connect(owner).mint(await addr1.getAddress(), amount);
 
-        expect(await twbtc.balanceOf(await addr1.getAddress())).to.equal(amount);
+            expect(await twbtc.balanceOf(await addr1.getAddress())).to.equal(amount);
+        });
+        it('should revert if exceedings max supply', async function () {
+            const amount = hre.ethers.parseUnits("21000001", 8);
+            await expect(twbtc.connect(owner)
+                .mint(await addr1.getAddress(), amount))
+                .to.be.revertedWithCustomError(twbtc, "TotalMintedExceedsMaxSupply")
+                .withArgs(amount);
+        });
     });
 
     it("should burn tokens", async function () {

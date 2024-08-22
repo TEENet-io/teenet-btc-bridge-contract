@@ -85,66 +85,67 @@ describe("TEENetBtcEvmBridge", function () {
         it('should mint TWBTC tokens and emit Minted event', async () => {
             const { bridge } = await loadFixture(deployBridge);
 
-            const evmAddress = hexlify(randomBytes(20));
+            const receiver = hexlify(randomBytes(20));
             const amount = 100;
-            const msg = randomBuffer(32);
+            const btcTxId = hexlify(randomBytes(32));
+            const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(['bytes32', 'address', 'uint256'], [btcTxId, receiver, amount]));
             const aux = randomBuffer(32);
-            const btcTxId = toHex(msg);
-            const { rx, s } = sign(msg, aux);
+            const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
 
-            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
                 .to.emit(bridge, 'Minted')
-                .withArgs(getAddress(evmAddress), amount, btcTxId);
+                .withArgs(btcTxId, getAddress(receiver), amount);
 
             const twbtc = await hre.ethers.getContractAt("TWBTC", await bridge.twbtc());
-            const balance = await twbtc.balanceOf(evmAddress);
+            const balance = await twbtc.balanceOf(receiver);
             expect(balance).to.equal(amount);
         });
-        it('should revert if evmAddress is zero address', async () => {
+        it('should revert if receiver is zero address', async () => {
             const { bridge } = await loadFixture(deployBridge);
 
-            const evmAddress = '0x' + '0'.repeat(40);
+            const receiver = '0x' + '0'.repeat(40);
             const amount = 100;
             const btcTxId = hexlify(randomBytes(32));
             const rx = hexlify(randomBytes(32));
             const s = hexlify(randomBytes(32));
 
-            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
-                .to.be.revertedWithCustomError(bridge, 'InvalidEvmAddress');
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
+                .to.be.revertedWithCustomError(bridge, 'ZeroEvmAddress');
         });
 
         it('should revert if amount is zero', async () => {
             const { bridge } = await loadFixture(deployBridge);
 
-            const evmAddress = hexlify(randomBytes(20));
+            const receiver = hexlify(randomBytes(20));
             const amount = 0;
             const btcTxId = hexlify(randomBytes(32));
             const rx = hexlify(randomBytes(32));
             const s = hexlify(randomBytes(32));
 
-            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
-                .to.be.revertedWithCustomError(bridge, 'AmountMustBeGreaterThanZero');
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
+                .to.be.revertedWithCustomError(bridge, 'ZeroAmount');
         });
 
         it('should revert if signature is invalid', async () => {
             const { bridge } = await loadFixture(deployBridge);
 
-            const evmAddress = hexlify(randomBytes(20));
+            const receiver = hre.ethers.getAddress(hexlify(randomBytes(20)));
             const amount = 100;
-            const msg = randomBuffer(32);
+            const btcTxId = hexlify(randomBytes(32));
+            const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(['bytes32', 'address', 'uint256'], [btcTxId, receiver, amount]));
+
             const aux = randomBuffer(32);
-            const btcTxId = toHex(msg);
-            const { rx, s } = sign(msg, aux);
+            const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
 
             // Modify the signature to make it invalid
             const modifiedS = '0x' + (BigInt(s) + 1n).toString(16);
 
-            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, s))
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
                 .to.emit(bridge, 'Minted')
-                .withArgs(getAddress(evmAddress), amount, btcTxId);
-            await expect(bridge.mint(evmAddress, amount, btcTxId, rx, modifiedS))
+                .withArgs(btcTxId, receiver, amount);
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, modifiedS))
                 .to.be.revertedWithCustomError(bridge, 'InvalidSchnorrSignature')
-                .withArgs(btcTxId, rx, modifiedS);
+                .withArgs(btcTxId, receiver, amount, rx, modifiedS);
         });
     });
 
@@ -155,22 +156,23 @@ describe("TEENetBtcEvmBridge", function () {
 
                 const signer = await hre.ethers.provider.getSigner(9);
 
+                const receiver = signer.address;
                 const mintAmount = 100;
-                const msg = randomBuffer(32);
+                const btcTxId = hexlify(randomBytes(32));
+                const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(['bytes32', 'address', 'uint256'], [btcTxId, receiver, mintAmount]));
                 const aux = randomBuffer(32);
-                const btcTxId = toHex(msg);
-                const { rx, s } = sign(msg, aux);
+                const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
 
-                await expect(bridge.mint(signer.address, mintAmount, btcTxId, rx, s))
+                await expect(bridge.mint(btcTxId, receiver, mintAmount, rx, s))
                     .to.emit(bridge, 'Minted')
-                    .withArgs(signer.address, mintAmount, btcTxId);
+                    .withArgs(btcTxId, receiver, mintAmount);
 
                 const redeemAmount = 100;
                 const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
 
                 await expect(bridge.connect(signer).redeemRequest(redeemAmount, btcAddress))
                     .to.emit(bridge, 'RedeemRequested')
-                    .withArgs(signer.address, redeemAmount, btcAddress);
+                    .withArgs(receiver, redeemAmount, btcAddress);
             });
             it('should revert if amount is zero', async () => {
                 const { bridge } = await loadFixture(deployBridge);
@@ -179,7 +181,7 @@ describe("TEENetBtcEvmBridge", function () {
                 const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
 
                 await expect(bridge.redeemRequest(amount, btcAddress))
-                    .to.be.revertedWithCustomError(bridge, 'AmountMustBeGreaterThanZero');
+                    .to.be.revertedWithCustomError(bridge, 'ZeroAmount');
             });
 
             it('should revert if sender has insufficient balance', async () => {
@@ -192,6 +194,134 @@ describe("TEENetBtcEvmBridge", function () {
 
                 await expect(bridge.connect(signer).redeemRequest(amount, btcAddress))
                     .to.be.revertedWithCustomError(bridge, 'InsufficientBalance');
+            });
+        });
+        describe("Prepare", function () {
+            it('should emit RedeemPrepared event', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const signer = await hre.ethers.provider.getSigner(9);
+
+                const receiver = signer.address;
+                const mintAmount = 100;
+                const btcTxId = hexlify(randomBytes(32));
+                const mintMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                    ['bytes32', 'address', 'uint256'], 
+                    [btcTxId, receiver, mintAmount])
+                );
+                const aux1 = randomBuffer(32);
+                const sig1 = sign(Buffer.from(mintMsg.substring(2), 'hex'), aux1);
+
+                await expect(bridge.mint(btcTxId, receiver, mintAmount, sig1.rx, sig1.s))
+                    .to.emit(bridge, 'Minted')
+                    .withArgs(btcTxId, receiver, mintAmount);
+
+                const requester = receiver;
+                const redeemAmount = 100;
+                const redeemRequestTxHash = hexlify(randomBytes(32));
+                const spendableTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
+                const spendableIdxs = [0, 4];
+        
+                const prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                    ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
+                    [redeemRequestTxHash, requester, redeemAmount, spendableTxIds, spendableIdxs])
+                );
+                const aux2 = randomBuffer(32);
+                const sig2 = sign(Buffer.from(prepareMsg.substring(2), 'hex'), aux2);
+
+                await expect(bridge.connect(signer)
+                    .redeemPrepare(
+                        redeemRequestTxHash, requester, redeemAmount, 
+                        spendableTxIds, spendableIdxs, 
+                        sig2.rx, sig2.s
+                    ))
+                    .to.emit(bridge, 'RedeemPrepared')
+                    .withArgs(redeemRequestTxHash, requester, redeemAmount, spendableTxIds, spendableIdxs);
+            });
+            it('should revert if requester is zero address', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const requester = '0x' + '0'.repeat(40);
+                const amount = 100;
+                const btcTxId = hexlify(randomBytes(32));
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+
+                await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [], rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'ZeroEvmAddress');
+            });
+            it('should revert if amount is zero', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const requester = hexlify(randomBytes(20));
+                const amount = 0;
+                const btcTxId = hexlify(randomBytes(32));
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+
+                await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [], rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'ZeroAmount');
+            });
+
+            it('should revert if spendableTxIds is empty', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const requester = hexlify(randomBytes(20));
+                const amount = 100;
+                const btcTxId = hexlify(randomBytes(32));
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+
+                await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [0], rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'ZeroSpendableTxIdsArrayLength');
+            });
+            
+            it('should revert if spendableIdxs is empty', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const requester = hexlify(randomBytes(20));
+                const amount = 100;
+                const btcTxId = hexlify(randomBytes(32));
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+
+                await expect(bridge.redeemPrepare(
+                    btcTxId, requester, amount, [hexlify(randomBytes(32))], [], rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'ZeroSpendableIdxsArrayLength');
+            });
+
+            it('should revert if spendableTxIds and spendableIdxs have different lengths', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const requester = hexlify(randomBytes(20));
+                const amount = 100;
+                const btcTxId = hexlify(randomBytes(32));
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+        
+                const spendableTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];    
+                const spendableIdxs = [0];
+
+                await expect(bridge.redeemPrepare(
+                    btcTxId, requester, amount, spendableTxIds, spendableIdxs, rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'SpendableTxIdsAndSpendableIdxsLengthMismatch');
+            });
+
+            it('should revert if there is any zero spendableTxId', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const requester = hexlify(randomBytes(20));
+                const amount = 100;
+                const btcTxId = hexlify(randomBytes(32));
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+        
+                const spendableTxIds = [hexlify(randomBytes(32)), '0x' + '0'.repeat(64)];    
+                const spendableIdxs = [0, 4];
+
+                await expect(bridge.redeemPrepare(
+                    btcTxId, requester, amount, spendableTxIds, spendableIdxs, rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'ZeroSpendableTxId');
             });
         });
     });

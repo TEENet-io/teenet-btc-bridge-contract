@@ -219,12 +219,12 @@ describe("TEENetBtcEvmBridge", function () {
                 const requester = receiver;
                 const redeemAmount = 100;
                 const redeemRequestTxHash = hexlify(randomBytes(32));
-                const spendableTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
-                const spendableIdxs = [0, 4];
+                const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
+                const outpointIdxs = [0, 4];
         
                 const prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
                     ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
-                    [redeemRequestTxHash, requester, redeemAmount, spendableTxIds, spendableIdxs])
+                    [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs])
                 );
                 const aux2 = randomBuffer(32);
                 const sig2 = sign(Buffer.from(prepareMsg.substring(2), 'hex'), aux2);
@@ -232,11 +232,11 @@ describe("TEENetBtcEvmBridge", function () {
                 await expect(bridge.connect(signer)
                     .redeemPrepare(
                         redeemRequestTxHash, requester, redeemAmount, 
-                        spendableTxIds, spendableIdxs, 
+                        outpointTxIds, outpointIdxs, 
                         sig2.rx, sig2.s
                     ))
                     .to.emit(bridge, 'RedeemPrepared')
-                    .withArgs(redeemRequestTxHash, requester, redeemAmount, spendableTxIds, spendableIdxs);
+                    .withArgs(redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs);
             });
             it('should revert if requester is zero address', async () => {
                 const { bridge } = await loadFixture(deployBridge);
@@ -263,7 +263,7 @@ describe("TEENetBtcEvmBridge", function () {
                     .to.be.revertedWithCustomError(bridge, 'ZeroAmount');
             });
 
-            it('should revert if spendableTxIds is empty', async () => {
+            it('should revert if outpointTxIds is empty', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
                 const requester = hexlify(randomBytes(20));
@@ -273,10 +273,10 @@ describe("TEENetBtcEvmBridge", function () {
                 const s = hexlify(randomBytes(32));
 
                 await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [0], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroSpendableTxIdsArrayLength');
+                    .to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxIdsArrayLength');
             });
             
-            it('should revert if spendableIdxs is empty', async () => {
+            it('should revert if outpointIdxs is empty', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
                 const requester = hexlify(randomBytes(20));
@@ -287,10 +287,10 @@ describe("TEENetBtcEvmBridge", function () {
 
                 await expect(bridge.redeemPrepare(
                     btcTxId, requester, amount, [hexlify(randomBytes(32))], [], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroSpendableIdxsArrayLength');
+                    .to.be.revertedWithCustomError(bridge, 'ZeroOutpointIdxsArrayLength');
             });
 
-            it('should revert if spendableTxIds and spendableIdxs have different lengths', async () => {
+            it('should revert if outpointTxIds and outpointIdxs have different lengths', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
                 const requester = hexlify(randomBytes(20));
@@ -299,15 +299,15 @@ describe("TEENetBtcEvmBridge", function () {
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
         
-                const spendableTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];    
-                const spendableIdxs = [0];
+                const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];    
+                const outpointIdxs = [0];
 
                 await expect(bridge.redeemPrepare(
-                    btcTxId, requester, amount, spendableTxIds, spendableIdxs, rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'SpendableTxIdsAndSpendableIdxsLengthMismatch');
+                    btcTxId, requester, amount, outpointTxIds, outpointIdxs, rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'OutpointTxIdsAndOutpointIdxsLengthMismatch');
             });
 
-            it('should revert if there is any zero spendableTxId', async () => {
+            it('should revert if there is any zero outpointTxId', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
                 const requester = hexlify(randomBytes(20));
@@ -316,12 +316,12 @@ describe("TEENetBtcEvmBridge", function () {
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
         
-                const spendableTxIds = [hexlify(randomBytes(32)), '0x' + '0'.repeat(64)];    
-                const spendableIdxs = [0, 4];
+                const outpointTxIds = [hexlify(randomBytes(32)), '0x' + '0'.repeat(64)];    
+                const outpointIdxs = [0, 4];
 
                 await expect(bridge.redeemPrepare(
-                    btcTxId, requester, amount, spendableTxIds, spendableIdxs, rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroSpendableTxId');
+                    btcTxId, requester, amount, outpointTxIds, outpointIdxs, rx, s))
+                    .to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxId');
             });
         });
     });

@@ -31,8 +31,8 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
         bytes32 indexed evmTxHash,
         address requester,
         uint256 amount,
-        bytes32[] spendableTxIds,
-        uint16[] spendableIdxs
+        bytes32[] outpointTxIds,
+        uint16[] outpointIdxs
     );
 
     constructor(uint256 pk_) {
@@ -124,14 +124,15 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
     /// @notice Prepare to redeem BTC. The function is performed by bridge 
     ///         nodes via m-out-of-n threshold Schnorr signature scheme.
     ///         After the bridge nodes observe the redeem request, they look 
-    ///         for the spendable BTC coins that can be used to construct the 
-    ///         BTC tx. They then record the spendables within the bridge 
-    ///         contract to avoid sending multiple BTC txs for the same redeem 
-    ///         request.
+    ///         for outpoints referring to some spendable BTC coins and reserve 
+    ///         them to construct the future BTC tx that executes the redeem. 
+    ///         They then record the outpoints within the bridge contract to 
+    ///         enforce the construction of the tx so that the bridge nodes can
+    ///         avoid sending multiple BTC txs for the same redeem request.
     /// @dev    The Schnorr signature is performed on 
     /// 
     ///             keccak256(redeemRequestTxHash||requester||amount||
-    ///                 spendableTxIds||spendableIdxs)
+    ///                 outpointTxIds||outpointIdxs)
     /// 
     ///         Function abi.encodePacked is used to do concatenation.
     ///
@@ -139,8 +140,8 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
     ///         request redeem btc
     /// @param  requester Address of the user who requested to redeem BTC
     /// @param  amount Amount of btc to be redeemed (in satoshi)
-    /// @param  spendableTxIds Spendable BTC coins' tx ids
-    /// @param  spendableIdxs Spendable BTC coins' output indexes
+    /// @param  outpointTxIds outpoint BTC coins' tx ids
+    /// @param  outpointIdxs outpoint BTC coins' output indexes
     /// @param  rx partial Schnorr signature
     /// @param  s partial Schnorr signature
     ///
@@ -148,8 +149,8 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
         bytes32 redeemRequestTxHash,
         address requester,
         uint256 amount,
-        bytes32[] memory spendableTxIds,
-        uint16[] memory spendableIdxs,
+        bytes32[] memory outpointTxIds,
+        uint16[] memory outpointIdxs,
         uint256 rx,
         uint256 s
     ) public {
@@ -165,21 +166,21 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
             revert ZeroAmount();
         }
 
-        if (spendableTxIds.length == 0) {
-            revert ZeroSpendableTxIdsArrayLength();
+        if (outpointTxIds.length == 0) {
+            revert ZeroOutpointTxIdsArrayLength();
         }
 
-        if (spendableIdxs.length == 0) {
-            revert ZeroSpendableIdxsArrayLength();
+        if (outpointIdxs.length == 0) {
+            revert ZeroOutpointIdxsArrayLength();
         }
 
-        if (spendableTxIds.length != spendableIdxs.length) {
-            revert SpendableTxIdsAndSpendableIdxsLengthMismatch();
+        if (outpointTxIds.length != outpointIdxs.length) {
+            revert OutpointTxIdsAndOutpointIdxsLengthMismatch();
         }
 
-        for (uint16 i = 0; i < spendableTxIds.length; i++) {
-            if (spendableTxIds[i] == 0) {
-                revert ZeroSpendableTxId();
+        for (uint16 i = 0; i < outpointTxIds.length; i++) {
+            if (outpointTxIds[i] == 0) {
+                revert ZeroOutpointTxId();
             }
         }
 
@@ -187,14 +188,14 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
             _pk,
             rx,
             s,
-            keccak256(abi.encodePacked(redeemRequestTxHash, requester, amount, spendableTxIds, spendableIdxs))
+            keccak256(abi.encodePacked(redeemRequestTxHash, requester, amount, outpointTxIds, outpointIdxs))
         )) {
             revert InvalidSchnorrSignature(redeemRequestTxHash, requester, amount, rx, s);
         }
 
         TWBTC(_twbtc).burn(requester, amount);
 
-        emit RedeemPrepared(redeemRequestTxHash, requester, amount, spendableTxIds, spendableIdxs);
+        emit RedeemPrepared(redeemRequestTxHash, requester, amount, outpointTxIds, outpointIdxs);
     }
 
     function _checkBalance(address addr, uint256 amount) private view {

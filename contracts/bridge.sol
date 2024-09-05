@@ -107,8 +107,9 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
         emit Minted(btcTxId, receiver, amount);
     }
 
-    /// @notice Request to redeem BTC. It only emits an event to notify bridge 
-    /// nodes. The function is performed by users who want to redeem BTC.
+    /// @notice Request to redeem BTC. It emits an event to notify bridge 
+    /// nodes and burn TWBTC tokens. The function is performed by users who 
+    /// want to redeem BTC.
     /// @param  amount Amount of BTC to be redeemed (in satoshi)
     /// @param  receiver Receivers's BTC address
     function redeemRequest(uint256 amount, string memory receiver) public {
@@ -116,7 +117,7 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
             revert ZeroAmount();
         }
 
-        _checkBalance(msg.sender, amount);
+        TWBTC(_twbtc).burnFrom(msg.sender, amount);
 
         emit RedeemRequested(msg.sender, amount, receiver);
     }
@@ -193,15 +194,6 @@ contract TEENetBtcEvmBridge is ITEENetBtcEvmBridgeErrors {
             revert InvalidSchnorrSignature(redeemRequestTxHash, requester, amount, rx, s);
         }
 
-        TWBTC(_twbtc).burn(requester, amount);
-
         emit RedeemPrepared(redeemRequestTxHash, requester, amount, outpointTxIds, outpointIdxs);
-    }
-
-    function _checkBalance(address addr, uint256 amount) private view {
-        uint256 balance = TWBTC(_twbtc).balanceOf(addr);
-        if (balance < amount) {
-            revert InsufficientBalance(addr, amount, balance);
-        }
     }
 }

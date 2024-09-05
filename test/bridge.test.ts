@@ -154,25 +154,42 @@ describe("TEENetBtcEvmBridge", function () {
             it('should emit RedeemRequested event', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const twbtcAddr = await bridge.twbtc();
+                const twbtc = await hre.ethers.getContractAt("TWBTC", twbtcAddr);
+
                 const signer = await hre.ethers.provider.getSigner(9);
 
                 const receiver = signer.address;
                 const mintAmount = 100;
                 const btcTxId = hexlify(randomBytes(32));
-                const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(['bytes32', 'address', 'uint256'], [btcTxId, receiver, mintAmount]));
+                const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                    ['bytes32', 'address', 'uint256'], [btcTxId, receiver, mintAmount]));
                 const aux = randomBuffer(32);
                 const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
 
+                // Mint some TWBTC tokens
                 await expect(bridge.mint(btcTxId, receiver, mintAmount, rx, s))
                     .to.emit(bridge, 'Minted')
                     .withArgs(btcTxId, receiver, mintAmount);
+                await expect(twbtc.balanceOf(receiver)).to.eventually.equal(mintAmount);
 
-                const redeemAmount = 100;
+                // Approve the bridge to spend the minted tokens
+                await expect(twbtc.connect(signer).approve(await bridge.getAddress(), mintAmount))
+                    .to.emit(twbtc, 'Approval')
+                    .withArgs(receiver, await bridge.getAddress(), mintAmount);
+
+                const redeemAmount = 80;
                 const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
 
+                // Request redeem
                 await expect(bridge.connect(signer).redeemRequest(redeemAmount, btcAddress))
                     .to.emit(bridge, 'RedeemRequested')
                     .withArgs(receiver, redeemAmount, btcAddress);
+
+                // Check the remaining balance of the requester
+                expect(await twbtc.balanceOf(receiver)).to.equal(mintAmount - redeemAmount);
+                // Check the remaining allowance of the bridge
+                expect(await twbtc.allowance(receiver, await bridge.getAddress())).to.equal(mintAmount - redeemAmount);
             });
             it('should revert if amount is zero', async () => {
                 const { bridge } = await loadFixture(deployBridge);
@@ -193,7 +210,7 @@ describe("TEENetBtcEvmBridge", function () {
                 const btcAddress = '34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo';
 
                 await expect(bridge.connect(signer).redeemRequest(amount, btcAddress))
-                    .to.be.revertedWithCustomError(bridge, 'InsufficientBalance');
+                    .to.be.reverted;
             });
         });
         describe("Prepare", function () {
@@ -202,26 +219,12 @@ describe("TEENetBtcEvmBridge", function () {
 
                 const signer = await hre.ethers.provider.getSigner(9);
 
-                const receiver = signer.address;
-                const mintAmount = 100;
-                const btcTxId = hexlify(randomBytes(32));
-                const mintMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
-                    ['bytes32', 'address', 'uint256'], 
-                    [btcTxId, receiver, mintAmount])
-                );
-                const aux1 = randomBuffer(32);
-                const sig1 = sign(Buffer.from(mintMsg.substring(2), 'hex'), aux1);
-
-                await expect(bridge.mint(btcTxId, receiver, mintAmount, sig1.rx, sig1.s))
-                    .to.emit(bridge, 'Minted')
-                    .withArgs(btcTxId, receiver, mintAmount);
-
-                const requester = receiver;
+                const requester = signer.address;;
                 const redeemAmount = 100;
                 const redeemRequestTxHash = hexlify(randomBytes(32));
                 const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
                 const outpointIdxs = [0, 4];
-        
+
                 const prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
                     ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
                     [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs])
@@ -231,8 +234,8 @@ describe("TEENetBtcEvmBridge", function () {
 
                 await expect(bridge.connect(signer)
                     .redeemPrepare(
-                        redeemRequestTxHash, requester, redeemAmount, 
-                        outpointTxIds, outpointIdxs, 
+                        redeemRequestTxHash, requester, redeemAmount,
+                        outpointTxIds, outpointIdxs,
                         sig2.rx, sig2.s
                     ))
                     .to.emit(bridge, 'RedeemPrepared')
@@ -275,7 +278,7 @@ describe("TEENetBtcEvmBridge", function () {
                 await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [0], rx, s))
                     .to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxIdsArrayLength');
             });
-            
+
             it('should revert if outpointIdxs is empty', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
@@ -298,8 +301,8 @@ describe("TEENetBtcEvmBridge", function () {
                 const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
-        
-                const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];    
+
+                const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
                 const outpointIdxs = [0];
 
                 await expect(bridge.redeemPrepare(
@@ -315,8 +318,8 @@ describe("TEENetBtcEvmBridge", function () {
                 const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
-        
-                const outpointTxIds = [hexlify(randomBytes(32)), '0x' + '0'.repeat(64)];    
+
+                const outpointTxIds = [hexlify(randomBytes(32)), '0x' + '0'.repeat(64)];
                 const outpointIdxs = [0, 4];
 
                 await expect(bridge.redeemPrepare(

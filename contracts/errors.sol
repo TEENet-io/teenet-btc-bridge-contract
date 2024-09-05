@@ -10,6 +10,5 @@ interface ITEENetBtcEvmBridgeErrors {
     error ZeroOutpointTxIdsArrayLength();
     error ZeroOutpointIdxsArrayLength();
     error OutpointTxIdsAndOutpointIdxsLengthMismatch();
-    error InsufficientBalance(address sender, uint256 redeemAmount, uint256 balance);
     error InvalidSchnorrSignature(bytes32 txId, address addr, uint256 amount, uint256 rx, uint256 s);
 }

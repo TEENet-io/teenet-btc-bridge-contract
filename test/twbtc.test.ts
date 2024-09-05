@@ -34,16 +34,4 @@ describe("TWBTC", function () {
                 .withArgs(amount);
         });
     });
-
-    it("should burn tokens", async function () {
-        const mintAmount = hre.ethers.parseUnits("50", 8);
-        const burnAmount = hre.ethers.parseUnits("25", 8);
-        const expectedAmount = mintAmount-burnAmount;
-
-        await twbtc.connect(owner).mint(await addr1.getAddress(), mintAmount);
-
-        await twbtc.connect(owner).burn(await addr1.getAddress(), burnAmount);
-
-        expect(await twbtc.balanceOf(await addr1.getAddress())).to.equal(expectedAmount);
-    });
 });

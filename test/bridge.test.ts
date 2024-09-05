@@ -137,15 +137,34 @@ describe("TEENetBtcEvmBridge", function () {
             const aux = randomBuffer(32);
             const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
 
-            // Modify the signature to make it invalid
+            // modifiedS = s + 1
             const modifiedS = '0x' + (BigInt(s) + 1n).toString(16);
 
-            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
-                .to.emit(bridge, 'Minted')
-                .withArgs(btcTxId, receiver, amount);
+            const bip340 = await hre.ethers.deployContract("Bip340Ecrec");
+            expect(await bip340.verify(pk, rx, s, msg)).to.equal(true);
+
             await expect(bridge.mint(btcTxId, receiver, amount, rx, modifiedS))
                 .to.be.revertedWithCustomError(bridge, 'InvalidSchnorrSignature')
                 .withArgs(btcTxId, receiver, amount, rx, modifiedS);
+        });
+        it('should revert if the same btcTxId is used twice', async () => {
+            const { bridge } = await loadFixture(deployBridge);
+
+            const receiver = hexlify(randomBytes(20));
+            const amount = 100;
+            const btcTxId = hexlify(randomBytes(32));
+            const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                ['bytes32', 'address', 'uint256'], [btcTxId, receiver, amount]));
+            const aux = randomBuffer(32);
+            const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
+
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
+                .to.emit(bridge, 'Minted')
+                .withArgs(btcTxId, getAddress(receiver), amount);
+
+            await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
+                .to.be.revertedWithCustomError(bridge, 'AlreadyMinted')
+                .withArgs(btcTxId);
         });
     });
 
@@ -325,6 +344,43 @@ describe("TEENetBtcEvmBridge", function () {
                 await expect(bridge.redeemPrepare(
                     btcTxId, requester, amount, outpointTxIds, outpointIdxs, rx, s))
                     .to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxId');
+            });
+
+            it('should revert if a redeem request has already been prepared', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const signer = await hre.ethers.provider.getSigner(9);
+
+                const requester = signer.address;
+                const redeemAmount = 100;
+                const redeemRequestTxHash = hexlify(randomBytes(32));
+                const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
+                const outpointIdxs = [0, 4];
+
+                const prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                    ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
+                    [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs])
+                );
+                const aux2 = randomBuffer(32);
+                const sig2 = sign(Buffer.from(prepareMsg.substring(2), 'hex'), aux2);
+
+                await expect(bridge.connect(signer)
+                    .redeemPrepare(
+                        redeemRequestTxHash, requester, redeemAmount,
+                        outpointTxIds, outpointIdxs,
+                        sig2.rx, sig2.s
+                    ))
+                    .to.emit(bridge, 'RedeemPrepared')
+                    .withArgs(redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs);
+
+                await expect(bridge.connect(signer)
+                    .redeemPrepare(
+                        redeemRequestTxHash, requester, redeemAmount,
+                        outpointTxIds, outpointIdxs,
+                        sig2.rx, sig2.s
+                    ))
+                    .to.be.revertedWithCustomError(bridge, 'AlreadyPrepared')
+                    .withArgs(redeemRequestTxHash);
             });
         });
     });

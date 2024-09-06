@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.20;
 
-interface ITEENetBtcEvmBridgeErrors {
+interface ITEENetBtcBridgeErrors {
     error ZeroAmount();
-    error ZeroEvmAddress();
-    error ZeroEvmTxHash();
+    error ZeroEthAddress();
+    error ZeroEthTxHash();
     error ZeroBtcTxId();
     error ZeroOutpointTxId();
     error ZeroOutpointTxIdsArrayLength();

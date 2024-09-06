@@ -30,9 +30,9 @@ const sign = (msg: any, aux: any) => {
     return { rx, s };
 }
 
-describe("TEENetBtcEvmBridge", function () {
+describe("TEENetBtcBridge", function () {
     async function deployBridge() {
-        const bridge = await hre.ethers.deployContract("TEENetBtcEvmBridge", [pk]);
+        const bridge = await hre.ethers.deployContract("TEENetBtcBridge", [pk]);
 
         return { bridge };
     };
@@ -110,7 +110,7 @@ describe("TEENetBtcEvmBridge", function () {
             const s = hexlify(randomBytes(32));
 
             await expect(bridge.mint(btcTxId, receiver, amount, rx, s))
-                .to.be.revertedWithCustomError(bridge, 'ZeroEvmAddress');
+                .to.be.revertedWithCustomError(bridge, 'ZeroEthAddress');
         });
 
         it('should revert if amount is zero', async () => {
@@ -270,7 +270,7 @@ describe("TEENetBtcEvmBridge", function () {
                 const s = hexlify(randomBytes(32));
 
                 await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroEvmAddress');
+                    .to.be.revertedWithCustomError(bridge, 'ZeroEthAddress');
             });
             it('should revert if amount is zero', async () => {
                 const { bridge } = await loadFixture(deployBridge);

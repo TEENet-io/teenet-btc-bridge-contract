@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, resolve } from 'path';
 
 function main() {
-    const contractName = 'TEENetBtcEvmBridge';
+    const contractName = 'TEENetBtcBridge';
     const contractPath = join(resolve(__dirname, '..'), `artifacts/contracts/bridge.sol/${contractName}.json`);
     const outputDir = join(__dirname, 'output');
 

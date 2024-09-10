@@ -5,7 +5,6 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 const schnorr = require("bip-schnorr");
 const ecurve = require("ecurve");
 const BigInteger = require("bigi");
-const Buffer = require('safe-buffer').Buffer;
 
 const curve = ecurve.getCurveByName('secp256k1');
 const G = curve.G;
@@ -88,7 +87,8 @@ describe("TEENetBtcBridge", function () {
             const receiver = hexlify(randomBytes(20));
             const amount = 100;
             const btcTxId = hexlify(randomBytes(32));
-            const msg = hre.ethers.keccak256(hre.ethers.solidityPacked(['bytes32', 'address', 'uint256'], [btcTxId, receiver, amount]));
+            const encode = hre.ethers.solidityPacked(['bytes32', 'address', 'uint256'], [btcTxId, receiver, amount]);
+            const msg = hre.ethers.keccak256(encode);
             const aux = randomBuffer(32);
             const { rx, s } = sign(Buffer.from(msg.substring(2), 'hex'), aux);
 
@@ -244,12 +244,13 @@ describe("TEENetBtcBridge", function () {
                 const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
                 const outpointIdxs = [0, 4];
 
-                const prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                const prepareMsg = hre.ethers.solidityPacked(
                     ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
-                    [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs])
-                );
+                    [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs]);
+
+                const signingHash = hre.ethers.keccak256(prepareMsg);
                 const aux2 = randomBuffer(32);
-                const sig2 = sign(Buffer.from(prepareMsg.substring(2), 'hex'), aux2);
+                const sig2 = sign(Buffer.from(signingHash.substring(2), 'hex'), aux2);
 
                 await expect(bridge.connect(signer)
                     .redeemPrepare(

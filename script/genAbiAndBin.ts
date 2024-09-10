@@ -2,17 +2,23 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, resolve } from 'path';
 
 function main() {
-    const contractName = 'TEENetBtcBridge';
-    const contractPath = join(resolve(__dirname, '..'), `artifacts/contracts/bridge.sol/${contractName}.json`);
-    const outputDir = join(__dirname, 'output');
+    let contractName = 'TWBTC';
+    let contractFile = join(resolve(__dirname, '..'), `artifacts/contracts/twbtc.sol/TWBTC.json`);
+    writeFiles(contractName, contractFile);
 
-    // Ensure the output directory exists
+    contractName = 'TEENetBtcBridge';
+    contractFile = join(resolve(__dirname, '..'), `artifacts/contracts/bridge.sol/TEENetBtcBridge.json`);
+    writeFiles(contractName, contractFile);
+}
+
+function writeFiles(contractName: string, contractFile: string) {
+    const outputDir = join(__dirname, 'output');
     if (!existsSync(outputDir)) {
         mkdirSync(outputDir);
     }
 
     // Load the compiled contract JSON
-    const contractJson = JSON.parse(readFileSync(contractPath, 'utf8'));
+    const contractJson = JSON.parse(readFileSync(contractFile, 'utf8'));
 
     // Extract ABI and bytecode
     const abi = contractJson.abi;

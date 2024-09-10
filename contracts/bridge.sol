@@ -23,16 +23,8 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @notice Mapping to keep track of prepared redeem requests
     mapping(bytes32 => bool) private _prepared;
 
-    event Minted(
-        bytes32 indexed btcTxId,
-        address indexed receiver,
-        uint256 indexed amount
-    );
-    event RedeemRequested(
-        address indexed sender,
-        uint256 indexed amount,
-        string indexed receiver
-    );
+    event Minted(bytes32 indexed btcTxId, address receiver, uint256 amount);
+    event RedeemRequested(address sender, uint256 amount, string receiver);
     event RedeemPrepared(
         bytes32 indexed ethTxHash,
         address requester,

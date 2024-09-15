@@ -238,15 +238,16 @@ describe("TEENetBtcBridge", function () {
 
                 const signer = await hre.ethers.provider.getSigner(9);
 
-                const requester = signer.address;;
-                const redeemAmount = 100;
                 const redeemRequestTxHash = hexlify(randomBytes(32));
+                const requester = signer.address;
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
+                const redeemAmount = 100;
                 const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
                 const outpointIdxs = [0, 4];
 
                 const prepareMsg = hre.ethers.solidityPacked(
-                    ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
-                    [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs]);
+                    ['bytes32', 'address', 'string', 'uint256', 'bytes32[]', 'uint16[]'],
+                    [redeemRequestTxHash, requester, receiver, redeemAmount, outpointTxIds, outpointIdxs]);
 
                 const signingHash = hre.ethers.keccak256(prepareMsg);
                 const aux2 = randomBuffer(32);
@@ -254,71 +255,94 @@ describe("TEENetBtcBridge", function () {
 
                 await expect(bridge.connect(signer)
                     .redeemPrepare(
-                        redeemRequestTxHash, requester, redeemAmount,
+                        redeemRequestTxHash, requester, receiver, redeemAmount,
                         outpointTxIds, outpointIdxs,
                         sig2.rx, sig2.s
                     ))
                     .to.emit(bridge, 'RedeemPrepared')
-                    .withArgs(redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs);
+                    .withArgs(redeemRequestTxHash, requester, receiver, redeemAmount, outpointTxIds, outpointIdxs);
             });
             it('should revert if requester is zero address', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const redeemRequestTxHash = hexlify(randomBytes(32));
                 const requester = '0x' + '0'.repeat(40);
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
                 const amount = 100;
-                const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
 
-                await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroEthAddress');
+                await expect(bridge.redeemPrepare(
+                    redeemRequestTxHash, requester, receiver, amount, [], [], rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'ZeroEthAddress');
+            });
+            it('should revert if receiver is empty', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const redeemRequestTxHash = hexlify(randomBytes(32));
+                const requester = hexlify(randomBytes(20));
+                const receiver = '';
+                const amount = 100;
+                
+                const rx = hexlify(randomBytes(32));
+                const s = hexlify(randomBytes(32));
+
+                await expect(bridge.redeemPrepare(
+                    redeemRequestTxHash, requester, receiver, amount, [], [], rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'EmptyString');
             });
             it('should revert if amount is zero', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const redeemRequestTxHash = hexlify(randomBytes(32));
                 const requester = hexlify(randomBytes(20));
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
                 const amount = 0;
-                const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
 
-                await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroAmount');
+                await expect(bridge.redeemPrepare(
+                    redeemRequestTxHash, requester, receiver, amount, [], [], rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'ZeroAmount');
             });
 
             it('should revert if outpointTxIds is empty', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const redeemRequestTxHash = hexlify(randomBytes(32));
                 const requester = hexlify(randomBytes(20));
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
                 const amount = 100;
-                const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
 
-                await expect(bridge.redeemPrepare(btcTxId, requester, amount, [], [0], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxIdsArrayLength');
+                await expect(bridge.redeemPrepare(
+                    redeemRequestTxHash, requester, receiver, amount, [], [0], rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'EmptyOutpointTxIds');
             });
 
             it('should revert if outpointIdxs is empty', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const redeemRequestTxHash = hexlify(randomBytes(32));
                 const requester = hexlify(randomBytes(20));
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
                 const amount = 100;
-                const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
 
                 await expect(bridge.redeemPrepare(
-                    btcTxId, requester, amount, [hexlify(randomBytes(32))], [], rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroOutpointIdxsArrayLength');
+                    redeemRequestTxHash, requester, receiver, amount, [hexlify(randomBytes(32))], [], rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'EmptyOutpointIdxs');
             });
 
             it('should revert if outpointTxIds and outpointIdxs have different lengths', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const redeemRequestTxHash = hexlify(randomBytes(32));
                 const requester = hexlify(randomBytes(20));
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
                 const amount = 100;
-                const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
 
@@ -326,16 +350,17 @@ describe("TEENetBtcBridge", function () {
                 const outpointIdxs = [0];
 
                 await expect(bridge.redeemPrepare(
-                    btcTxId, requester, amount, outpointTxIds, outpointIdxs, rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'OutpointTxIdsAndOutpointIdxsLengthMismatch');
+                    redeemRequestTxHash, requester, receiver, amount, outpointTxIds, outpointIdxs, rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'OutpointTxIdsAndOutpointIdxsLengthMismatch');
             });
 
             it('should revert if there is any zero outpointTxId', async () => {
                 const { bridge } = await loadFixture(deployBridge);
 
+                const redeemRequestTxHash = hexlify(randomBytes(32));
                 const requester = hexlify(randomBytes(20));
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
                 const amount = 100;
-                const btcTxId = hexlify(randomBytes(32));
                 const rx = hexlify(randomBytes(32));
                 const s = hexlify(randomBytes(32));
 
@@ -343,8 +368,8 @@ describe("TEENetBtcBridge", function () {
                 const outpointIdxs = [0, 4];
 
                 await expect(bridge.redeemPrepare(
-                    btcTxId, requester, amount, outpointTxIds, outpointIdxs, rx, s))
-                    .to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxId');
+                    redeemRequestTxHash, requester, receiver, amount, outpointTxIds, outpointIdxs, rx, s)
+                ).to.be.revertedWithCustomError(bridge, 'ZeroOutpointTxId');
             });
 
             it('should revert if a redeem request has already been prepared', async () => {
@@ -352,31 +377,32 @@ describe("TEENetBtcBridge", function () {
 
                 const signer = await hre.ethers.provider.getSigner(9);
 
-                const requester = signer.address;
-                const redeemAmount = 100;
                 const redeemRequestTxHash = hexlify(randomBytes(32));
+                const requester = signer.address;
+                const receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
+                const redeemAmount = 100;
                 const outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
                 const outpointIdxs = [0, 4];
 
                 const prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
-                    ['bytes32', 'address', 'uint256', 'bytes32[]', 'uint16[]'],
-                    [redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs])
+                    ['bytes32', 'address', 'string', 'uint256', 'bytes32[]', 'uint16[]'],
+                    [redeemRequestTxHash, requester, receiver, redeemAmount, outpointTxIds, outpointIdxs])
                 );
                 const aux2 = randomBuffer(32);
                 const sig2 = sign(Buffer.from(prepareMsg.substring(2), 'hex'), aux2);
 
                 await expect(bridge.connect(signer)
                     .redeemPrepare(
-                        redeemRequestTxHash, requester, redeemAmount,
+                        redeemRequestTxHash, requester, receiver, redeemAmount,
                         outpointTxIds, outpointIdxs,
                         sig2.rx, sig2.s
                     ))
                     .to.emit(bridge, 'RedeemPrepared')
-                    .withArgs(redeemRequestTxHash, requester, redeemAmount, outpointTxIds, outpointIdxs);
+                    .withArgs(redeemRequestTxHash, requester, receiver, redeemAmount, outpointTxIds, outpointIdxs);
 
                 await expect(bridge.connect(signer)
                     .redeemPrepare(
-                        redeemRequestTxHash, requester, redeemAmount,
+                        redeemRequestTxHash, requester, receiver, redeemAmount,
                         outpointTxIds, outpointIdxs,
                         sig2.rx, sig2.s
                     ))

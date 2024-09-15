@@ -28,6 +28,7 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     event RedeemPrepared(
         bytes32 indexed ethTxHash,
         address requester,
+        string receiver,
         uint256 amount,
         bytes32[] outpointTxIds,
         uint16[] outpointIdxs
@@ -145,6 +146,7 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @param  redeemRequestTxHash Hash of the tx that sent by the user to
     ///         request redeem btc
     /// @param  requester Address of the user who requested to redeem BTC
+    /// @param  receiver Receiver's BTC address
     /// @param  amount Amount of btc to be redeemed (in satoshi)
     /// @param  outpointTxIds outpoint BTC coins' tx ids
     /// @param  outpointIdxs outpoint BTC coins' output indexes
@@ -154,6 +156,7 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     function redeemPrepare(
         bytes32 redeemRequestTxHash,
         address requester,
+        string memory receiver,
         uint256 amount,
         bytes32[] memory outpointTxIds,
         uint16[] memory outpointIdxs,
@@ -172,16 +175,20 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
             revert ZeroEthAddress();
         }
 
+        if (bytes(receiver).length == 0) {
+            revert EmptyString();
+        }
+
         if (amount == 0) {
             revert ZeroAmount();
         }
 
         if (outpointTxIds.length == 0) {
-            revert ZeroOutpointTxIdsArrayLength();
+            revert EmptyOutpointTxIds();
         }
 
         if (outpointIdxs.length == 0) {
-            revert ZeroOutpointIdxsArrayLength();
+            revert EmptyOutpointIdxs();
         }
 
         if (outpointTxIds.length != outpointIdxs.length) {
@@ -203,6 +210,7 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
                     abi.encodePacked(
                         redeemRequestTxHash,
                         requester,
+                        receiver,
                         amount,
                         outpointTxIds,
                         outpointIdxs
@@ -224,6 +232,7 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
         emit RedeemPrepared(
             redeemRequestTxHash,
             requester,
+            receiver,
             amount,
             outpointTxIds,
             outpointIdxs

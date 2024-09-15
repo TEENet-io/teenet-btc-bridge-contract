@@ -138,15 +138,15 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     ///         avoid sending multiple BTC txs for the same redeem request.
     /// @dev    The Schnorr signature is performed on
     ///
-    ///             keccak256(redeemRequestTxHash||requester||amount||
-    ///                 outpointTxIds||outpointIdxs)
+    ///             keccak256(redeemRequestTxHash||requester||receiver||
+    ///                 amount||outpointTxIds||outpointIdxs)
     ///
     ///         Function abi.encodePacked is used to do concatenation.
     ///
     /// @param  redeemRequestTxHash Hash of the tx that sent by the user to
     ///         request redeem btc
     /// @param  requester Address of the user who requested to redeem BTC
-    /// @param  receiver Receiver's BTC address
+    /// @param  receiver BTC address that will receive the redeemed BTC
     /// @param  amount Amount of btc to be redeemed (in satoshi)
     /// @param  outpointTxIds outpoint BTC coins' tx ids
     /// @param  outpointIdxs outpoint BTC coins' output indexes

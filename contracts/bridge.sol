@@ -23,6 +23,9 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @notice Mapping to keep track of prepared redeem requests
     mapping(bytes32 => bool) private _prepared;
 
+    /// @notice Mapping to keep track of spendable outpoints having been used
+    mapping(bytes32 => bool) private _btcTxIds;
+
     event Minted(bytes32 indexed btcTxId, address receiver, uint256 amount);
     event RedeemRequested(address sender, uint256 amount, string receiver);
     event RedeemPrepared(
@@ -148,8 +151,8 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @param  requester Address of the user who requested to redeem BTC
     /// @param  receiver BTC address that will receive the redeemed BTC
     /// @param  amount Amount of btc to be redeemed (in satoshi)
-    /// @param  outpointTxIds outpoint BTC coins' tx ids
-    /// @param  outpointIdxs outpoint BTC coins' output indexes
+    /// @param  outpointTxIds tx ids of the spendable outpoints
+    /// @param  outpointIdxs vout of the spendable outpoints
     /// @param  rx partial Schnorr signature
     /// @param  s partial Schnorr signature
     ///
@@ -199,6 +202,10 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
             if (outpointTxIds[i] == 0) {
                 revert ZeroOutpointTxId();
             }
+
+            if (_btcTxIds[outpointTxIds[i]]) {
+                revert BtcTxIdAlreadyUsed(outpointTxIds[i]);
+            }
         }
 
         if (
@@ -228,6 +235,10 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
         }
 
         _prepared[redeemRequestTxHash] = true;
+        
+        for(uint16 i = 0; i < outpointTxIds.length; i++) {
+            _btcTxIds[outpointTxIds[i]] = true;
+        }
 
         emit RedeemPrepared(
             redeemRequestTxHash,
@@ -240,8 +251,7 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     }
 
     /// @notice Check if TWBTC token are minted
-    /// @param  btcTxId ID of the Bitcoin transaction that transfers the funds
-    ///         to the bridge BTC wallet
+    /// @param  btcTxId tx id of a spendable outpoint
     /// @return bool
     function isMinted(bytes32 btcTxId) public view returns (bool) {
         return _minted[btcTxId];
@@ -252,5 +262,12 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @return bool
     function isPrepared(bytes32 txHash) public view returns (bool) {
         return _prepared[txHash];
+    }
+
+    /// @notice Check if the BTC tx id has been used for prepare a redeem
+    /// @param  btcTxId tx id of a spendable outpoint
+    /// @return bool
+    function isUsed(bytes32 btcTxId) public view returns (bool) {
+        return _btcTxIds[btcTxId];
     }
 }

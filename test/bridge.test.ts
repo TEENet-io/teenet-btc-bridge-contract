@@ -409,6 +409,48 @@ describe("TEENetBtcBridge", function () {
                     .to.be.revertedWithCustomError(bridge, 'AlreadyPrepared')
                     .withArgs(redeemRequestTxHash);
             });
+
+            it('should revert if btcTxId is already used for prepare a redeem', async () => {
+                const { bridge } = await loadFixture(deployBridge);
+
+                const signer = await hre.ethers.provider.getSigner(9);
+
+                let redeemRequestTxHash = hexlify(randomBytes(32));
+                let requester = signer.address;
+                let receiver = 'bc1qh2a5n8u9429seg9pu3x2te89z9yxk3pmxxc47z';
+                let redeemAmount = 100;
+                let outpointTxIds = [hexlify(randomBytes(32)), hexlify(randomBytes(32))];
+                let outpointIdxs = [0, 4];
+
+                let prepareMsg = hre.ethers.keccak256(hre.ethers.solidityPacked(
+                    ['bytes32', 'address', 'string', 'uint256', 'bytes32[]', 'uint16[]'],
+                    [redeemRequestTxHash, requester, receiver, redeemAmount, outpointTxIds, outpointIdxs])
+                );
+                let aux = randomBuffer(32);
+                let sig = sign(Buffer.from(prepareMsg.substring(2), 'hex'), aux);
+
+                await expect(bridge.connect(signer)
+                    .redeemPrepare(
+                        redeemRequestTxHash, requester, receiver, redeemAmount,
+                        outpointTxIds, outpointIdxs,
+                        sig.rx, sig.s
+                    ))
+                    .to.emit(bridge, 'RedeemPrepared')
+                    .withArgs(redeemRequestTxHash, requester, receiver, redeemAmount, outpointTxIds, outpointIdxs);
+
+                for (let i = 0; i < outpointIdxs.length; i++) {
+                    expect(await bridge.isUsed(outpointTxIds[i])).to.be.true;
+                }
+
+                await expect(bridge.connect(signer)
+                    .redeemPrepare(
+                        hexlify(randomBytes(32)), requester, receiver, redeemAmount,
+                        [hexlify(randomBytes(32)), outpointTxIds[1]], outpointIdxs,
+                        hexlify(randomBytes(32)), hexlify(randomBytes(32))
+                    ))
+                    .to.be.revertedWithCustomError(bridge, 'BtcTxIdAlreadyUsed')
+                    .withArgs(outpointTxIds[1]);
+            });
         });
     });
 });

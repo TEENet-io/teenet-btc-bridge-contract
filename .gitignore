@@ -153,3 +153,5 @@ ignition/deployments/chain-31337
 
 # tmp script
 /script/tmp.*
+
+/ignition/deployments/

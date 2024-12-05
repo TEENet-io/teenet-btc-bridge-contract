@@ -7,9 +7,14 @@ interface ITEENetBtcBridgeErrors {
     error ZeroEthTxHash();
     error ZeroBtcTxId();
     error ZeroOutpointTxId();
+    error ZeroFee();
+
     error EmptyString();
     error EmptyOutpointTxIds();
     error EmptyOutpointIdxs();
+    
+    error InsufficientAmount();
+
     error OutpointTxIdsAndOutpointIdxsLengthMismatch();
     error InvalidSchnorrSignature(bytes32 txId, address addr, uint256 amount, uint256 rx, uint256 s);
     error AlreadyMinted(bytes32 btcTxId);

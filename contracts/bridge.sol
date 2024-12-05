@@ -17,6 +17,12 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @notice Address of the deployed bip340-solidity library
     address private _bip340;
 
+    /// @notice Bridge fee in Satoshi
+    uint256 private _fee;
+
+    /// @notice Address of the account holding the bridge fee
+    address private _feeAccount;
+
     /// @notice Mapping to keep track of minted TWBTC tokens
     mapping(bytes32 => bool) private _minted;
 
@@ -37,8 +43,18 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
         uint16[] outpointIdxs
     );
 
-    constructor(uint256 pk_) {
+    constructor(uint256 pk_, address feeAccount_, uint256 fee_) {
         _pk = pk_;
+
+        if (feeAccount_ == address(0)) {
+            revert ZeroEthAddress();
+        }
+        _feeAccount = feeAccount_;
+
+        if (fee_ == 0) {
+            revert ZeroFee();
+        }
+        _fee = fee_;
 
         /// @dev    Set the deployed bridge as the owner of the TWBTC contract
         _twbtc = address(new TWBTC(address(this)));
@@ -52,6 +68,11 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
         return _pk;
     }
 
+    /// @notice Get the bridge fee
+    function fee() public view returns (uint256) {
+        return _fee;
+    }
+
     /// @notice Get the deployed TWBTC contract address
     function twbtc() public view returns (address) {
         return _twbtc;
@@ -59,6 +80,11 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
 
     function bip340() public view returns (address) {
         return _bip340;
+    }
+
+    /// @notice Get the fee account address
+    function feeAccount() public view returns (address) {
+        return _feeAccount;
     }
 
     /// @notice Mint TWBTC tokens and transfer to the receiver.
@@ -87,8 +113,8 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
             revert ZeroEthAddress();
         }
 
-        if (amount == 0) {
-            revert ZeroAmount();
+        if (amount <= _fee) {
+            revert InsufficientAmount();
         }
 
         if (_minted[btcTxId]) {
@@ -107,13 +133,14 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
             revert InvalidSchnorrSignature(btcTxId, receiver, amount, rx, s);
         }
 
-        // Mint the TWBTC tokens
-        TWBTC(_twbtc).mint(receiver, amount);
+        // Charge fee
+        TWBTC(_twbtc).mint(receiver, amount-_fee);
+        TWBTC(_twbtc).mint(_feeAccount, _fee);
 
         // Mark the btcTxId as minted
         _minted[btcTxId] = true;
 
-        emit Minted(btcTxId, receiver, amount);
+        emit Minted(btcTxId, receiver, amount-_fee);
     }
 
     /// @notice Request to redeem BTC. It emits an event to notify bridge
@@ -122,11 +149,15 @@ contract TEENetBtcBridge is ITEENetBtcBridgeErrors {
     /// @param  amount Amount of BTC to be redeemed (in satoshi)
     /// @param  receiver Receivers's BTC address
     function redeemRequest(uint256 amount, string memory receiver) public {
-        if (amount == 0) {
-            revert ZeroAmount();
+        if (amount <= _fee) {
+            revert InsufficientAmount();
         }
 
-        TWBTC(_twbtc).burnFrom(msg.sender, amount);
+        // Charge fee
+        TWBTC(_twbtc).transferFrom(msg.sender, _feeAccount, _fee);
+        
+        // Burn tokens
+        TWBTC(_twbtc).burnFrom(msg.sender, amount-_fee);
 
         emit RedeemRequested(msg.sender, amount, receiver);
     }

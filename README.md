@@ -1,1 +1,1 @@
-# teenet-btc-evm-bridge-contract
+# teenet-btc-eth-bridge-contract
